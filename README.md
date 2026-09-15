@@ -8,6 +8,19 @@ $result = AiClient::prompt('Summarise our Q3 planning notes.')
     ->generateTextResult();
 ```
 
+## Requirements
+
+| | |
+|---|---|
+| WordPress | 6.9 or later |
+| PHP | 7.4 or later, with the sodium extension |
+| PHP AI Client | Bundled with WordPress 7.0 and later; a separate plugin on 6.9 |
+| Microsoft | An Entra ID app registration, and a Microsoft 365 Copilot add-on license per user |
+
+There is deliberately no `Requires Plugins` header. On WordPress 7.0 and later the AI Client is part of core rather
+than a plugin, so declaring the dependency that way would block activation on exactly the versions that satisfy it.
+The plugin checks for `AiClient` at runtime instead and shows an admin notice when it is missing.
+
 ## How it differs from the other AI Client providers
 
 Anthropic, OpenAI and Gemini providers take one site-wide API key and talk to a completions endpoint. The Microsoft 365
@@ -30,6 +43,12 @@ field is ever read.
 instruction, as `additionalContext` — the documented channel for extra grounding text. Copilot treats that history as
 background material rather than as turns of its own, which is the closest available mapping.
 
+**Timeouts are set here, not by the SDK.** The AI Client resolves its HTTP client through `Psr18ClientDiscovery` and
+applies no timeout of its own, and Microsoft documents the Chat API as prone to gateway timeouts. Without a limit a slow
+turn occupies a PHP worker until the web server kills it, so the model sets its own: 60 seconds for a chat turn, 15 for
+opening a conversation, 10 to connect. A caller that supplies its own `RequestOptions` is left alone, including when it
+deliberately sets none.
+
 **One pseudo-model.** Graph publishes no model catalogue for Copilot and callers cannot choose the underlying model, so
 `CopilotModelMetadataDirectory` returns a single fixed `microsoft-365-copilot` entry instead of issuing a list-models
 request.
@@ -42,8 +61,8 @@ provider rather than sending a request that is silently ignored:
 | Option | Status |
 |---|---|
 | `systemInstruction` | Supported, delivered as grounding context |
-| `webSearch` | Supported, maps to `contextualResources.webContext` |
-| `customOptions` | Supported, passes `contextualResources` through verbatim |
+| `webSearch` | Supported. Web grounding is switched **off** unless a prompt asks for it, and the toggle is sent every turn because Microsoft treats it as single-turn |
+| `customOptions` | Supported. A `contextualResources` key is forwarded to Graph verbatim, which means it can also override the web grounding decision above — treat it as a privileged passthrough |
 | `temperature`, `topP`, `topK` | Not supported by the API |
 | `maxTokens`, `stopSequences` | Not supported by the API |
 | `functionDeclarations` | Not supported by the API |
@@ -88,22 +107,29 @@ declared floor cannot pass unnoticed.
 
 ## Storage and privacy
 
-Each connected user's tokens live in user meta, encrypted with `sodium_crypto_secretbox` keyed
-from `wp_salt('auth')`. If libsodium or the salt is unavailable the plugin refuses to store
-anything rather than falling back to plaintext — a refresh token here carries `Mail.Read`,
-`Sites.Read.All` and `Chat.Read` against the owner's account.
+Each connected user's tokens live in user meta, encrypted with `sodium_crypto_secretbox` keyed from `wp_salt('auth')`.
+If libsodium or the salt is unavailable the plugin refuses to store anything rather than falling back to plaintext — a
+refresh token here carries `Mail.Read`, `Sites.Read.All` and `Chat.Read` against the owner's account.
 
-`uninstall.php` removes the settings and every user's tokens. It cannot revoke anything at
-Microsoft; consent is withdrawn at [myaccount.microsoft.com](https://myaccount.microsoft.com/).
+The client secret is stored with autoloading disabled, so it is not read into memory on every page load. Better still,
+define it as a constant and keep it out of the database entirely.
 
-Note for multisite: user meta is network-global while the app registration is a per-site option,
-so a user connected on one site of a network is connected on all of them, even where a different
-Entra ID application is configured. Treat the network as one trust boundary.
+`uninstall.php` removes the settings and every user's tokens. It cannot revoke anything at Microsoft; consent is
+withdrawn at [myaccount.microsoft.com](https://myaccount.microsoft.com/).
+
+Note for multisite: user meta is network-global while the app registration is a per-site option, so a user connected on
+one site of a network is connected on all of them, even where a different Entra ID application is configured. Treat the
+network as one trust boundary.
 
 ## Caveats worth repeating
 
 The Chat API is on Graph `/beta`, which Microsoft marks as unsupported for production and subject to change. Every user
 needs a Microsoft 365 Copilot add-on license. Background generation without a signed-in user is not possible.
+
+**This plugin has not been run against a live tenant.** It passes `php -l`, PHPStan level 8 and PHPCS, and static
+analysis has already caught one bug that would have made every request fail, but no part of the OAuth flow, the token
+refresh or the Graph calls has been exercised for real. There is no test suite yet either. Treat the runtime behaviour
+as unverified until you have completed a connection yourself.
 
 ## License
 

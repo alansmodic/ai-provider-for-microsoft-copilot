@@ -4,7 +4,7 @@ Tags: ai, microsoft, copilot, microsoft-365
 Requires at least: 6.9
 Tested up to: 6.9
 Requires PHP: 7.4
-Stable tag: 0.2.0
+Stable tag: 0.2.1
 License: GPL-2.0-or-later
 License URI: https://spdx.org/licenses/GPL-2.0-or-later.html
 
@@ -20,6 +20,9 @@ Copilot can only reach files, mail and messages that the signed-in user could al
 
 = Requirements =
 
+* WordPress 6.9 or later, and PHP 7.4 or later.
+* The PHP AI Client, which WordPress 7.0 and later bundle. On 6.9 it installs as a separate plugin.
+* The PHP sodium extension and a defined authentication salt, used to encrypt stored tokens.
 * A Microsoft Entra ID application registration you control.
 * A Microsoft 365 Copilot add-on license for every person who will use the provider.
 * Each user connects their own Microsoft work account under Settings > Microsoft Copilot AI.
@@ -57,7 +60,8 @@ This plugin sends prompt text to Microsoft and stores Microsoft credentials on y
 
 == Installation ==
 
-1. Install and activate the PHP AI Client (bundled with WordPress 7.0+).
+1. Make the PHP AI Client available. WordPress 7.0 and later bundle it, so there is nothing to do.
+   On WordPress 6.9, install and activate the PHP AI Client plugin first.
 2. Activate this plugin.
 3. Register an application in Microsoft Entra ID, add the redirect URI shown on the settings screen, grant the seven
    delegated Microsoft Graph permissions listed there, and create a client secret.
@@ -65,6 +69,14 @@ This plugin sends prompt text to Microsoft and stores Microsoft credentials on y
 5. Each user clicks "Connect Microsoft account".
 
 == Changelog ==
+
+= 0.2.1 =
+* Corrected the WordPress version guidance: the plugin supports 6.9, where the PHP AI Client is a
+  separate plugin, as well as 7.0 and later, which bundle it. An admin notice previously implied
+  7.0 was required.
+* Documented the request timeouts, the token storage model, and that `customOptions` can override
+  the web grounding setting.
+* Stated plainly that the plugin has not yet been run against a live Microsoft tenant.
 
 = 0.2.0 =
 * Requests to Microsoft Graph now carry explicit timeouts, so a slow Copilot turn cannot occupy a

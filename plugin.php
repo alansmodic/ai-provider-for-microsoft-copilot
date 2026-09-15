@@ -6,7 +6,7 @@
  * Description:       Microsoft 365 Copilot provider for the WordPress AI Client.
  * Requires at least: 6.9
  * Requires PHP:      7.4
- * Version:           0.2.0
+ * Version:           0.2.1
  * Author:            Alan Smodic
  * License:           GPL-2.0-or-later
  * License URI:       https://spdx.org/licenses/GPL-2.0-or-later.html
@@ -85,10 +85,18 @@ function maybe_render_dependency_notice(): void
         return;
     }
 
+    /*
+     * Two paragraphs rather than one concatenated string: each is a whole sentence a translator
+     * can render freely, which gluing fragments together with a separator would prevent.
+     */
     printf(
-        '<div class="notice notice-error"><p>%s</p></div>',
+        '<div class="notice notice-error"><p>%s</p><p>%s</p></div>',
         esc_html__(
-            'AI Provider for Microsoft Copilot requires the PHP AI Client, bundled with WordPress 7.0 and later.',
+            'AI Provider for Microsoft Copilot requires the PHP AI Client, which is not available.',
+            'ai-provider-for-microsoft-copilot'
+        ),
+        esc_html__(
+            'WordPress 7.0 and later include it. On WordPress 6.9, install it as a plugin.',
             'ai-provider-for-microsoft-copilot'
         )
     );
