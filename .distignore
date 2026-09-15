@@ -1,0 +1,11 @@
+.git
+.github
+.gitignore
+.distignore
+composer.json
+composer.lock
+phpstan.neon.dist
+phpcs.xml.dist
+phpunit.xml.dist
+tests
+README.md

@@ -1,0 +1,32 @@
+{
+    "name": "alansmodic/ai-provider-for-microsoft-copilot",
+    "description": "Microsoft 365 Copilot provider for the PHP AI Client SDK. Works as both a Composer package and WordPress plugin.",
+    "license": "GPL-2.0-or-later",
+    "keywords": ["ai", "microsoft", "copilot", "microsoft-365", "wordpress", "llm"],
+    "require": {
+        "php": ">=7.4"
+    },
+    "require-dev": {
+        "phpstan/phpstan": "~2.1",
+        "phpunit/phpunit": "^9.6",
+        "squizlabs/php_codesniffer": "^3.7 || ^4.0",
+        "wordpress/php-ai-client": "^1.3.1"
+    },
+    "suggest": {
+        "wordpress/php-ai-client": "Required. The core PHP AI Client SDK that this provider extends."
+    },
+    "minimum-stability": "dev",
+    "prefer-stable": true,
+    "autoload": {
+        "psr-4": {
+            "WordPress\\MicrosoftCopilotAiProvider\\": "src/"
+        }
+    },
+    "config": {
+        "optimize-autoloader": true,
+        "platform": {
+            "php": "7.4"
+        },
+        "sort-packages": true
+    }
+}
