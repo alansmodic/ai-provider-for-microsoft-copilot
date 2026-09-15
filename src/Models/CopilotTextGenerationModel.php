@@ -11,6 +11,7 @@ use WordPress\AiClient\Messages\Enums\MessageRoleEnum;
 use WordPress\AiClient\Providers\ApiBasedImplementation\AbstractApiBasedModel;
 use WordPress\AiClient\Providers\Http\Contracts\RequestAuthenticationInterface;
 use WordPress\AiClient\Providers\Http\DTO\Request;
+use WordPress\AiClient\Providers\Http\DTO\RequestOptions;
 use WordPress\AiClient\Providers\Http\DTO\Response;
 use WordPress\AiClient\Providers\Http\Enums\HttpMethodEnum;
 use WordPress\AiClient\Providers\Http\Exception\ResponseException;
@@ -40,6 +41,41 @@ use WordPress\MicrosoftCopilotAiProvider\Provider\CopilotProvider;
  */
 class CopilotTextGenerationModel extends AbstractApiBasedModel implements TextGenerationModelInterface
 {
+    /**
+     * Seconds to wait for a Copilot chat turn before giving up.
+     *
+     * Microsoft documents the Chat API as prone to gateway timeouts, and the SDK's PSR-18
+     * transport applies no timeout of its own, so without this a slow turn occupies a PHP worker
+     * until the web server kills it. Grounded answers routinely take ten seconds or more, so the
+     * limit is generous rather than tight.
+     *
+     * @since 0.2.0
+     *
+     * @var float
+     */
+    public const DEFAULT_CHAT_TIMEOUT = 60.0;
+
+    /**
+     * Seconds to wait when opening a conversation.
+     *
+     * Creating a conversation does no inference, so it should be quick; a long wait here means
+     * Graph is unhealthy and the chat turn would fail anyway.
+     *
+     * @since 0.2.0
+     *
+     * @var float
+     */
+    public const DEFAULT_CONVERSATION_TIMEOUT = 15.0;
+
+    /**
+     * Seconds to wait for the TCP connection itself.
+     *
+     * @since 0.2.0
+     *
+     * @var float
+     */
+    public const DEFAULT_CONNECT_TIMEOUT = 10.0;
+
     /**
      * {@inheritDoc}
      *
@@ -85,7 +121,7 @@ class CopilotTextGenerationModel extends AbstractApiBasedModel implements TextGe
              * because an empty PHP array would be encoded as `[]`, which Graph rejects.
              */
             '{}',
-            $this->getRequestOptions()
+            $this->resolveRequestOptions(self::DEFAULT_CONVERSATION_TIMEOUT)
         );
 
         $request = $this->getRequestAuthentication()->authenticateRequest($request);
@@ -121,7 +157,7 @@ class CopilotTextGenerationModel extends AbstractApiBasedModel implements TextGe
             ),
             ['Content-Type' => 'application/json'],
             $this->prepareChatParams($prompt),
-            $this->getRequestOptions()
+            $this->resolveRequestOptions(self::DEFAULT_CHAT_TIMEOUT)
         );
 
         $request = $this->getRequestAuthentication()->authenticateRequest($request);
@@ -130,6 +166,32 @@ class CopilotTextGenerationModel extends AbstractApiBasedModel implements TextGe
         ResponseUtil::throwIfNotSuccessful($response);
 
         return $response;
+    }
+
+    /**
+     * Gets the request options to use, applying a default timeout when the caller set none.
+     *
+     * A caller that supplies its own RequestOptions is trusted and left alone, including when it
+     * deliberately sets no timeout.
+     *
+     * @since 0.2.0
+     *
+     * @param float $timeout Default timeout in seconds.
+     * @return RequestOptions The options to send with the request.
+     */
+    protected function resolveRequestOptions(float $timeout): RequestOptions
+    {
+        $options = $this->getRequestOptions();
+
+        if ($options instanceof RequestOptions) {
+            return $options;
+        }
+
+        $options = new RequestOptions();
+        $options->setTimeout($timeout);
+        $options->setConnectTimeout(self::DEFAULT_CONNECT_TIMEOUT);
+
+        return $options;
     }
 
     /**

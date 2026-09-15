@@ -3,6 +3,7 @@
     <description>Coding standards for the Microsoft Copilot AI provider.</description>
 
     <file>plugin.php</file>
+    <file>uninstall.php</file>
     <file>src</file>
 
     <arg name="extensions" value="php"/>
@@ -21,6 +22,7 @@
     -->
     <rule ref="PSR1.Files.SideEffects">
         <exclude-pattern>plugin.php</exclude-pattern>
+        <exclude-pattern>uninstall.php</exclude-pattern>
     </rule>
 
     <!-- The WordPress security and escaping rules still apply to the admin surfaces. -->

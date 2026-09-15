@@ -32,7 +32,7 @@ jobs:
           coverage: none
 
       - name: Syntax check
-        run: find plugin.php src -name '*.php' -print0 | xargs -0 -n1 -P4 php -l
+        run: find plugin.php uninstall.php src -name '*.php' -print0 | xargs -0 -n1 -P4 php -l
 
   static-analysis:
     name: PHPStan
@@ -48,7 +48,7 @@ jobs:
       - uses: ramsey/composer-install@v3
 
       - name: PHPStan
-        run: vendor/bin/phpstan analyse --no-progress --error-format=github
+        run: vendor/bin/phpstan analyse --no-progress --memory-limit=1G --error-format=github
 
   coding-standards:
     name: PHPCS

@@ -28,16 +28,26 @@ class ConnectionController
     private TokenStore $store;
 
     /**
+     * @var Settings The app registration settings.
+     */
+    private Settings $settings;
+
+    /**
      * Constructor.
      *
      * @since 0.1.0
      *
      * @param EntraIdClient|null $client Optional OAuth client.
      * @param TokenStore|null $store Optional token store.
+     * @param Settings|null $settings Optional settings instance.
      */
-    public function __construct(?EntraIdClient $client = null, ?TokenStore $store = null)
-    {
-        $this->client = $client ?? new EntraIdClient(new Settings());
+    public function __construct(
+        ?EntraIdClient $client = null,
+        ?TokenStore $store = null,
+        ?Settings $settings = null
+    ) {
+        $this->settings = $settings ?? new Settings();
+        $this->client = $client ?? new EntraIdClient($this->settings);
         $this->store = $store ?? new TokenStore();
     }
 
@@ -53,6 +63,16 @@ class ConnectionController
         add_action('admin_post_ai_provider_microsoft_copilot_connect', [$this, 'handleConnect']);
         add_action('admin_post_ai_provider_microsoft_copilot_disconnect', [$this, 'handleDisconnect']);
         add_action('admin_post_ai_provider_microsoft_copilot_callback', [$this, 'handleCallback']);
+
+        /*
+         * Signing in at Microsoft can outlast the WordPress session. Without a nopriv handler,
+         * admin-post.php answers the return trip with an empty 400 and the authorization code is
+         * spent for nothing, so the logged-out case is routed through the login screen instead.
+         */
+        add_action(
+            'admin_post_nopriv_ai_provider_microsoft_copilot_callback',
+            [$this, 'handleCallbackWhenLoggedOut']
+        );
     }
 
     /**
@@ -65,6 +85,18 @@ class ConnectionController
     public function handleConnect(): void
     {
         $userId = $this->requireUser('ai_provider_microsoft_copilot_connect');
+
+        if (!$this->settings->isConfigured()) {
+            $this->redirectBack(
+                'error',
+                __(
+                    'The Microsoft Entra ID application is not fully configured.',
+                    'ai-provider-for-microsoft-copilot'
+                )
+            );
+
+            return;
+        }
 
         /*
          * The state value is both a CSRF guard and the means of recovering which WordPress user
@@ -98,6 +130,21 @@ class ConnectionController
         $this->store->delete($userId);
 
         $this->redirectBack('disconnected');
+    }
+
+    /**
+     * Sends a logged-out user through the login screen, preserving the OAuth response.
+     *
+     * auth_redirect() builds its return URL from the current request, so the code and state
+     * parameters survive the detour and handleCallback() runs once the session is restored.
+     *
+     * @since 0.2.0
+     *
+     * @return void
+     */
+    public function handleCallbackWhenLoggedOut(): void
+    {
+        auth_redirect();
     }
 
     /**
@@ -155,13 +202,25 @@ class ConnectionController
             return;
         }
 
-        $this->store->save(
+        $stored = $this->store->save(
             $userId,
             $tokens['access_token'],
             $tokens['refresh_token'],
             $tokens['expires_in'],
             $this->client->fetchAccountName($tokens['access_token'])
         );
+
+        if (!$stored) {
+            $this->redirectBack(
+                'error',
+                __(
+                    'Sign-in succeeded, but the tokens could not be encrypted, so the connection was discarded.',
+                    'ai-provider-for-microsoft-copilot'
+                )
+            );
+
+            return;
+        }
 
         $this->redirectBack('connected');
     }

@@ -11,7 +11,9 @@ namespace WordPress\MicrosoftCopilotAiProvider\Auth;
  * delegated-only permission model: every request is made as the signed-in person, so Copilot's
  * answers stay inside that person's own document permissions.
  *
- * Refresh tokens are encrypted at rest with the site's auth salts when OpenSSL is available.
+ * Tokens are encrypted at rest with libsodium's authenticated encryption, keyed from the site's
+ * auth salt. A refresh token here grants read access to the owner's mail, files and Teams
+ * messages, so storage that cannot be encrypted is refused rather than written in the clear.
  *
  * @since 0.1.0
  */
@@ -19,7 +21,38 @@ class TokenStore
 {
     public const META_KEY = '_ai_provider_microsoft_copilot_tokens';
 
-    private const CIPHER = 'aes-256-cbc';
+    /**
+     * Prefix marking a value encrypted with sodium's secretbox.
+     *
+     * @since 0.2.0
+     *
+     * @var string
+     */
+    private const PREFIX_SODIUM = 'sodium:';
+
+    /**
+     * Prefixes written by 0.1.0, still readable so existing connections survive an upgrade.
+     *
+     * @since 0.2.0
+     *
+     * @var string
+     */
+    private const PREFIX_LEGACY_CBC = 'enc:';
+    private const PREFIX_LEGACY_PLAIN = 'plain:';
+
+    private const LEGACY_CIPHER = 'aes-256-cbc';
+
+    /**
+     * Determines whether tokens can be stored securely on this installation.
+     *
+     * @since 0.2.0
+     *
+     * @return bool True if libsodium and a usable salt are both present.
+     */
+    public function isAvailable(): bool
+    {
+        return function_exists('sodium_crypto_secretbox') && $this->getEncryptionKey() !== '';
+    }
 
     /**
      * Stores a token set for a user.
@@ -31,7 +64,7 @@ class TokenStore
      * @param string $refreshToken The refresh token.
      * @param int $expiresIn Lifetime of the access token, in seconds.
      * @param string $accountName Display name or UPN of the connected Microsoft account.
-     * @return void
+     * @return bool True if the tokens were stored, false if encryption was unavailable.
      */
     public function save(
         int $userId,
@@ -39,19 +72,30 @@ class TokenStore
         string $refreshToken,
         int $expiresIn,
         string $accountName = ''
-    ): void {
+    ): bool {
+        $encryptedAccess = $this->encrypt($accessToken);
+        $encryptedRefresh = $this->encrypt($refreshToken);
+
+        if ($encryptedAccess === null || $encryptedRefresh === null) {
+            return false;
+        }
+
         /*
          * A 60 second safety margin keeps a token that is about to lapse from being sent on a
          * request that then fails midway through generation.
          */
-        $payload = [
-            'access_token' => $this->encrypt($accessToken),
-            'refresh_token' => $this->encrypt($refreshToken),
-            'expires_at' => time() + max(0, $expiresIn - 60),
-            'account_name' => $accountName,
-        ];
+        update_user_meta(
+            $userId,
+            self::META_KEY,
+            [
+                'access_token' => $encryptedAccess,
+                'refresh_token' => $encryptedRefresh,
+                'expires_at' => time() + max(0, $expiresIn - 60),
+                'account_name' => $accountName,
+            ]
+        );
 
-        update_user_meta($userId, self::META_KEY, $payload);
+        return true;
     }
 
     /**
@@ -156,10 +200,17 @@ class TokenStore
             return null;
         }
 
+        /*
+         * The expiry is read with is_numeric rather than is_int: meta that has been through a
+         * JSON-based export and import comes back as a string, and treating that as a missing
+         * expiry would force a token refresh on every single request.
+         */
+        $expiresAt = $payload['expires_at'] ?? null;
+
         return [
             'access_token' => is_string($payload['access_token'] ?? null) ? $payload['access_token'] : '',
             'refresh_token' => is_string($payload['refresh_token']) ? $payload['refresh_token'] : '',
-            'expires_at' => is_int($payload['expires_at'] ?? null) ? $payload['expires_at'] : 0,
+            'expires_at' => is_numeric($expiresAt) ? (int) $expiresAt : 0,
             'account_name' => is_string($payload['account_name'] ?? null) ? $payload['account_name'] : '',
         ];
     }
@@ -167,41 +218,21 @@ class TokenStore
     /**
      * Encrypts a token for storage.
      *
-     * Falls back to returning the plain value when OpenSSL or the site salts are unavailable, so
-     * that the plugin still works on minimal hosts. The prefix records which form was written.
-     *
      * @since 0.1.0
      *
      * @param string $value The plaintext token.
-     * @return string The stored representation.
+     * @return string|null The stored representation, or null if encryption is unavailable.
      */
-    private function encrypt(string $value): string
+    private function encrypt(string $value): ?string
     {
-        $key = $this->getEncryptionKey();
-
-        if ($key === '' || !function_exists('openssl_encrypt')) {
-            return 'plain:' . $value;
+        if (!$this->isAvailable()) {
+            return null;
         }
 
-        $ivLength = (int) openssl_cipher_iv_length(self::CIPHER);
-        $iv = openssl_random_pseudo_bytes($ivLength);
+        $nonce = random_bytes(SODIUM_CRYPTO_SECRETBOX_NONCEBYTES);
+        $ciphertext = sodium_crypto_secretbox($value, $nonce, $this->getEncryptionKey());
 
-        /*
-         * A failure to gather entropy must not silently downgrade to a predictable IV, so the
-         * value is stored unencrypted rather than encrypted badly. Both outcomes are recorded by
-         * the prefix, and the caller can tell them apart.
-         */
-        if (!is_string($iv)) {
-            return 'plain:' . $value;
-        }
-
-        $ciphertext = openssl_encrypt($value, self::CIPHER, $key, OPENSSL_RAW_DATA, $iv);
-
-        if ($ciphertext === false) {
-            return 'plain:' . $value;
-        }
-
-        return 'enc:' . base64_encode($iv . $ciphertext);
+        return self::PREFIX_SODIUM . base64_encode($nonce . $ciphertext);
     }
 
     /**
@@ -214,56 +245,102 @@ class TokenStore
      */
     private function decrypt(string $stored): string
     {
-        if (strpos($stored, 'plain:') === 0) {
-            return substr($stored, 6);
+        if (strpos($stored, self::PREFIX_SODIUM) === 0) {
+            return $this->decryptSodium(substr($stored, strlen(self::PREFIX_SODIUM)));
         }
 
-        if (strpos($stored, 'enc:') !== 0) {
+        // Values written by 0.1.0. Read only; nothing writes these formats any more.
+        if (strpos($stored, self::PREFIX_LEGACY_PLAIN) === 0) {
+            return substr($stored, strlen(self::PREFIX_LEGACY_PLAIN));
+        }
+
+        if (strpos($stored, self::PREFIX_LEGACY_CBC) === 0) {
+            return $this->decryptLegacyCbc(substr($stored, strlen(self::PREFIX_LEGACY_CBC)));
+        }
+
+        return '';
+    }
+
+    /**
+     * Decrypts a secretbox payload.
+     *
+     * @since 0.2.0
+     *
+     * @param string $encoded Base64 of nonce followed by ciphertext.
+     * @return string The plaintext, or an empty string if it cannot be authenticated.
+     */
+    private function decryptSodium(string $encoded): string
+    {
+        if (!$this->isAvailable()) {
             return '';
         }
 
-        $key = $this->getEncryptionKey();
+        $raw = base64_decode($encoded, true);
 
-        if ($key === '' || !function_exists('openssl_decrypt')) {
+        if ($raw === false || strlen($raw) <= SODIUM_CRYPTO_SECRETBOX_NONCEBYTES) {
             return '';
         }
 
-        $raw = base64_decode(substr($stored, 4), true);
+        $plaintext = sodium_crypto_secretbox_open(
+            substr($raw, SODIUM_CRYPTO_SECRETBOX_NONCEBYTES),
+            substr($raw, 0, SODIUM_CRYPTO_SECRETBOX_NONCEBYTES),
+            $this->getEncryptionKey()
+        );
 
-        if ($raw === false) {
+        // A false return means the ciphertext failed authentication and must not be trusted.
+        return is_string($plaintext) ? $plaintext : '';
+    }
+
+    /**
+     * Decrypts a value written by 0.1.0's unauthenticated AES-256-CBC path.
+     *
+     * @since 0.2.0
+     *
+     * @param string $encoded Base64 of IV followed by ciphertext.
+     * @return string The plaintext, or an empty string on failure.
+     */
+    private function decryptLegacyCbc(string $encoded): string
+    {
+        if (!function_exists('openssl_decrypt') || !defined('AUTH_KEY') || !is_string(AUTH_KEY)) {
             return '';
         }
 
-        $ivLength = (int) openssl_cipher_iv_length(self::CIPHER);
+        $raw = base64_decode($encoded, true);
+        $ivLength = (int) openssl_cipher_iv_length(self::LEGACY_CIPHER);
 
-        if (strlen($raw) <= $ivLength) {
+        if ($raw === false || strlen($raw) <= $ivLength) {
             return '';
         }
 
         $plaintext = openssl_decrypt(
             substr($raw, $ivLength),
-            self::CIPHER,
-            $key,
+            self::LEGACY_CIPHER,
+            hash('sha256', AUTH_KEY, true),
             OPENSSL_RAW_DATA,
             substr($raw, 0, $ivLength)
         );
 
-        return $plaintext === false ? '' : $plaintext;
+        return is_string($plaintext) ? $plaintext : '';
     }
 
     /**
-     * Derives the encryption key from the site's auth salts.
+     * Derives the encryption key from the site's auth salt.
+     *
+     * wp_salt() is preferred over the raw AUTH_KEY constant because it also covers installations
+     * that keep their salts in the database rather than in wp-config.php.
      *
      * @since 0.1.0
      *
-     * @return string A 32 byte key, or an empty string if no salt is defined.
+     * @return string A 32 byte key, or an empty string if no salt is available.
      */
     private function getEncryptionKey(): string
     {
-        if (defined('AUTH_KEY') && is_string(AUTH_KEY) && AUTH_KEY !== '') {
-            return hash('sha256', AUTH_KEY, true);
+        $salt = function_exists('wp_salt') ? wp_salt('auth') : '';
+
+        if (!is_string($salt) || $salt === '') {
+            return '';
         }
 
-        return '';
+        return hash('sha256', $salt, true);
     }
 }

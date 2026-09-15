@@ -6,7 +6,7 @@
  * Description:       Microsoft 365 Copilot provider for the WordPress AI Client.
  * Requires at least: 6.9
  * Requires PHP:      7.4
- * Version:           0.1.0
+ * Version:           0.2.0
  * Author:            Alan Smodic
  * License:           GPL-2.0-or-later
  * License URI:       https://spdx.org/licenses/GPL-2.0-or-later.html

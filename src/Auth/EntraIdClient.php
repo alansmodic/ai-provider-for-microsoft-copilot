@@ -137,7 +137,7 @@ class EntraIdClient
         $response = wp_remote_get(
             'https://graph.microsoft.com/v1.0/me',
             [
-                'timeout' => 15,
+                'timeout' => 10,
                 'headers' => ['Authorization' => 'Bearer ' . $accessToken],
             ]
         );
@@ -185,10 +185,15 @@ class EntraIdClient
         $body['client_secret'] = $this->settings->getClientSecret();
         $body['scope'] = implode(' ', self::SCOPES);
 
+        /*
+         * Ten seconds, not the three that WordPress VIP prefers: a token exchange that is merely
+         * slow should not be reported to the user as a failed sign-in. Neither of these endpoints
+         * performs inference, so a wait this long already means Entra ID is unhealthy.
+         */
         $response = wp_remote_post(
             $this->getEndpoint('token'),
             [
-                'timeout' => 20,
+                'timeout' => 10,
                 'headers' => ['Content-Type' => 'application/x-www-form-urlencoded'],
                 'body' => $body,
             ]
@@ -212,7 +217,18 @@ class EntraIdClient
                 ? $data['error_description']
                 : __('Unknown error.', 'ai-provider-for-microsoft-copilot');
 
-            return new WP_Error('ai_provider_microsoft_copilot_token_error', $description);
+            $oauthError = isset($data['error']) && is_string($data['error']) ? $data['error'] : '';
+
+            /*
+             * The OAuth error code travels as error data so that the caller can distinguish a
+             * revoked grant, which should clear the stored tokens, from a transient failure,
+             * which should not.
+             */
+            return new WP_Error(
+                'ai_provider_microsoft_copilot_token_error',
+                $description,
+                ['oauth_error' => $oauthError]
+            );
         }
 
         return [

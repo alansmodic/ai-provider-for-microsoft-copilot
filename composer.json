@@ -43,10 +43,10 @@
         }
     },
     "scripts": {
-        "lint": "find plugin.php src -name '*.php' -print0 | xargs -0 -n1 php -l",
+        "lint": "find plugin.php uninstall.php src -name '*.php' -print0 | xargs -0 -n1 php -l",
         "phpcs": "phpcs",
         "phpcbf": "phpcbf",
-        "phpstan": "phpstan analyse --memory-limit=512M",
+        "phpstan": "phpstan analyse --memory-limit=1G",
         "qa": [
             "@lint",
             "@phpcs",

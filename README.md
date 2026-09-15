@@ -86,6 +86,20 @@ output.
 CI runs all three on every push and pull request, with `php -l` additionally on PHP 7.4 so syntax newer than the
 declared floor cannot pass unnoticed.
 
+## Storage and privacy
+
+Each connected user's tokens live in user meta, encrypted with `sodium_crypto_secretbox` keyed
+from `wp_salt('auth')`. If libsodium or the salt is unavailable the plugin refuses to store
+anything rather than falling back to plaintext — a refresh token here carries `Mail.Read`,
+`Sites.Read.All` and `Chat.Read` against the owner's account.
+
+`uninstall.php` removes the settings and every user's tokens. It cannot revoke anything at
+Microsoft; consent is withdrawn at [myaccount.microsoft.com](https://myaccount.microsoft.com/).
+
+Note for multisite: user meta is network-global while the app registration is a per-site option,
+so a user connected on one site of a network is connected on all of them, even where a different
+Entra ID application is configured. Treat the network as one trust boundary.
+
 ## Caveats worth repeating
 
 The Chat API is on Graph `/beta`, which Microsoft marks as unsupported for production and subject to change. Every user
