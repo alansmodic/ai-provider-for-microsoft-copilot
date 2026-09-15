@@ -174,9 +174,11 @@ class SettingsPage
         $status = isset($_GET['copilot_status'])
             ? sanitize_key(wp_unslash((string) $_GET['copilot_status']))
             : '';
-        $message = isset($_GET['copilot_message'])
-            ? sanitize_text_field(rawurldecode(wp_unslash((string) $_GET['copilot_message'])))
+        $rawMessage = isset($_GET['copilot_message'])
+            ? sanitize_text_field(wp_unslash((string) $_GET['copilot_message']))
             : '';
+        // Sanitized again after decoding, since percent-decoding can reveal characters the first pass never saw.
+        $message = $rawMessage !== '' ? sanitize_text_field(rawurldecode($rawMessage)) : '';
         // phpcs:enable WordPress.Security.NonceVerification.Recommended
 
         if ($status === '') {
@@ -219,9 +221,23 @@ class SettingsPage
      */
     private function renderRequirementsNotice(): void
     {
+        /*
+         * Kept as two sentences rather than one paragraph-length string: shorter strings are
+         * easier to translate, and the two facts are independently useful.
+         */
         echo '<div class="notice notice-info inline"><p>';
         echo esc_html__(
-            'The Microsoft 365 Copilot Chat API supports delegated permissions only: each person must connect their own Microsoft work account, and that account needs a Microsoft 365 Copilot add-on license. The API is currently published on Microsoft Graph beta, which Microsoft does not support for production use.',
+            'Copilot supports delegated permissions only, so each person connects their own Microsoft account.',
+            'ai-provider-for-microsoft-copilot'
+        );
+        echo ' ';
+        echo esc_html__(
+            'That account needs a Microsoft 365 Copilot add-on license.',
+            'ai-provider-for-microsoft-copilot'
+        );
+        echo ' ';
+        echo esc_html__(
+            'The API is published on Microsoft Graph beta, which Microsoft does not support for production use.',
             'ai-provider-for-microsoft-copilot'
         );
         echo '</p></div>';
@@ -244,7 +260,7 @@ class SettingsPage
             printf(
                 '<p>%s</p>',
                 esc_html__(
-                    'An administrator must finish the Entra ID application setup below before accounts can be connected.',
+                    'An administrator must finish the Entra ID setup below before accounts can be connected.',
                     'ai-provider-for-microsoft-copilot'
                 )
             );
@@ -280,7 +296,7 @@ class SettingsPage
         printf(
             '<p>%s</p>',
             esc_html__(
-                'Sign in with your Microsoft work account to let this site generate text through Microsoft 365 Copilot on your behalf.',
+                'Sign in with your Microsoft work account to let this site use Copilot on your behalf.',
                 'ai-provider-for-microsoft-copilot'
             )
         );

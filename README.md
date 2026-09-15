@@ -68,6 +68,24 @@ Graph permissions, all of which Microsoft requires for a single Chat API call to
 `Mail.Read`, `People.Read.All`, `OnlineMeetingTranscript.Read.All`, `Chat.Read`, `ChannelMessage.Read.All`,
 `ExternalItem.Read.All` — plus `offline_access` to receive a refresh token.
 
+## Development
+
+```bash
+composer install
+composer qa          # php -l, PHPCS and PHPStan
+composer phpcbf      # auto-fix what PHPCS can
+```
+
+PHPStan runs at **level 8** with `szepeviktor/phpstan-wordpress` for the WordPress stubs. PHPCS enforces PSR-12
+alongside the WordPress security and i18n rules — PSR-12 rather than the full WordPress standard because these provider
+packages are PSR-4 Composer libraries, matching how `wordpress/ai-provider-for-anthropic` is built. Two rules are
+excluded deliberately, each documented in `phpcs.xml.dist`: PSR-1's side-effects rule for `plugin.php`, which a plugin
+bootstrap cannot satisfy, and `EscapeOutput.ExceptionNotEscaped`, which misreads library exception messages as screen
+output.
+
+CI runs all three on every push and pull request, with `php -l` additionally on PHP 7.4 so syntax newer than the
+declared floor cannot pass unnoticed.
+
 ## Caveats worth repeating
 
 The Chat API is on Graph `/beta`, which Microsoft marks as unsupported for production and subject to change. Every user

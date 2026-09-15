@@ -1,0 +1,45 @@
+<?xml version="1.0"?>
+<ruleset name="AI Provider for Microsoft Copilot">
+    <description>Coding standards for the Microsoft Copilot AI provider.</description>
+
+    <file>plugin.php</file>
+    <file>src</file>
+
+    <arg name="extensions" value="php"/>
+    <arg name="colors"/>
+    <arg value="sp"/>
+
+    <!--
+        PSR-12 governs formatting, matching the WordPress AI provider packages, which are
+        PSR-4 Composer libraries rather than classic WordPress plugins.
+    -->
+    <rule ref="PSR12"/>
+
+    <!--
+        A WordPress plugin bootstrap necessarily both declares symbols and runs add_action()
+        calls, which PSR-1 forbids. The rest of PSR-12 still applies.
+    -->
+    <rule ref="PSR1.Files.SideEffects">
+        <exclude-pattern>plugin.php</exclude-pattern>
+    </rule>
+
+    <!-- The WordPress security and escaping rules still apply to the admin surfaces. -->
+    <rule ref="WordPress.Security">
+        <!--
+            This sniff treats exception messages as screen output. These exceptions are thrown by
+            library code for developers and are never echoed, so escaping them would corrupt the
+            message without protecting anything.
+        -->
+        <exclude name="WordPress.Security.EscapeOutput.ExceptionNotEscaped"/>
+    </rule>
+    <rule ref="WordPress.WP.I18n">
+        <properties>
+            <property name="text_domain" type="array">
+                <element value="ai-provider-for-microsoft-copilot"/>
+            </property>
+        </properties>
+    </rule>
+
+    <config name="minimum_wp_version" value="6.9"/>
+    <config name="testVersion" value="7.4-"/>
+</ruleset>

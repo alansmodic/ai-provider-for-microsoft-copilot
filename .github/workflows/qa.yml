@@ -1,0 +1,72 @@
+name: QA
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: qa-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: Lint (PHP ${{ matrix.php }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # The floor and the current release, so syntax newer than the declared
+        # minimum cannot pass unnoticed.
+        php: ['7.4', '8.4']
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          coverage: none
+
+      - name: Syntax check
+        run: find plugin.php src -name '*.php' -print0 | xargs -0 -n1 -P4 php -l
+
+  static-analysis:
+    name: PHPStan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          coverage: none
+
+      - uses: ramsey/composer-install@v3
+
+      - name: PHPStan
+        run: vendor/bin/phpstan analyse --no-progress --error-format=github
+
+  coding-standards:
+    name: PHPCS
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          coverage: none
+          tools: cs2pr
+
+      - uses: ramsey/composer-install@v3
+
+      - name: PHPCS
+        run: vendor/bin/phpcs --report=full --report-checkstyle=./phpcs-report.xml
+
+      - name: Annotate PHPCS results
+        if: ${{ failure() }}
+        run: cs2pr ./phpcs-report.xml

@@ -1,0 +1,14 @@
+includes:
+    - vendor/szepeviktor/phpstan-wordpress/extension.neon
+
+parameters:
+    level: 8
+    phpVersion:
+        min: 70400
+        max: 80400
+    paths:
+        - plugin.php
+        - src
+    scanDirectories:
+        - vendor/wordpress/php-ai-client/src
+    treatPhpDocTypesAsCertain: false

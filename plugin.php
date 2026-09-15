@@ -3,7 +3,7 @@
 /**
  * Plugin Name:       AI Provider for Microsoft Copilot
  * Plugin URI:        https://github.com/alansmodic/ai-provider-for-microsoft-copilot
- * Description:       Microsoft 365 Copilot provider for the WordPress AI Client. Each user connects their own Microsoft work account.
+ * Description:       Microsoft 365 Copilot provider for the WordPress AI Client.
  * Requires at least: 6.9
  * Requires PHP:      7.4
  * Version:           0.1.0
@@ -88,7 +88,7 @@ function maybe_render_dependency_notice(): void
     printf(
         '<div class="notice notice-error"><p>%s</p></div>',
         esc_html__(
-            'AI Provider for Microsoft Copilot requires the PHP AI Client (bundled with WordPress 7.0+, or installable as a plugin on 6.9).',
+            'AI Provider for Microsoft Copilot requires the PHP AI Client, bundled with WordPress 7.0 and later.',
             'ai-provider-for-microsoft-copilot'
         )
     );

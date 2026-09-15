@@ -185,6 +185,16 @@ class TokenStore
 
         $ivLength = (int) openssl_cipher_iv_length(self::CIPHER);
         $iv = openssl_random_pseudo_bytes($ivLength);
+
+        /*
+         * A failure to gather entropy must not silently downgrade to a predictable IV, so the
+         * value is stored unencrypted rather than encrypted badly. Both outcomes are recorded by
+         * the prefix, and the caller can tell them apart.
+         */
+        if (!is_string($iv)) {
+            return 'plain:' . $value;
+        }
+
         $ciphertext = openssl_encrypt($value, self::CIPHER, $key, OPENSSL_RAW_DATA, $iv);
 
         if ($ciphertext === false) {

@@ -65,4 +65,25 @@ class CopilotBearerRequestAuthentication implements RequestAuthenticationInterfa
 
         return $request->withHeader('Authorization', 'Bearer ' . $token);
     }
+
+    /**
+     * {@inheritDoc}
+     *
+     * @since 0.1.0
+     *
+     * @return array<string, mixed> The JSON schema.
+     */
+    public static function getJsonSchema(): array
+    {
+        /*
+         * This authentication holds no serializable credential. Tokens belong to an individual
+         * WordPress user, live in user meta, and are resolved at request time, so there is nothing
+         * for a caller to supply or persist through the schema.
+         */
+        return [
+            'type' => 'object',
+            'properties' => [],
+            'additionalProperties' => false,
+        ];
+    }
 }

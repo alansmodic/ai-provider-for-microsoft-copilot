@@ -75,6 +75,11 @@ class ConnectionController
 
         set_transient(self::STATE_TRANSIENT_PREFIX . $state, $userId, 15 * MINUTE_IN_SECONDS);
 
+        /*
+         * wp_safe_redirect() is deliberately not used here: the whole point of this redirect is to
+         * leave the site for login.microsoftonline.com, which its allow-list would block.
+         */
+        // phpcs:ignore WordPress.Security.SafeRedirect.wp_redirect_wp_redirect
         wp_redirect($this->client->getAuthorizationUrl($state));
         exit;
     }
@@ -138,12 +143,16 @@ class ConnectionController
 
         if ($error !== '' || $code === '') {
             $this->redirectBack('error', $error);
+
+            return;
         }
 
         $tokens = $this->client->exchangeCode($code);
 
         if (is_wp_error($tokens)) {
             $this->redirectBack('error', $tokens->get_error_message());
+
+            return;
         }
 
         $this->store->save(
