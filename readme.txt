@@ -4,7 +4,7 @@ Tags: ai, microsoft, copilot, microsoft-365
 Requires at least: 6.9
 Tested up to: 6.9
 Requires PHP: 7.4
-Stable tag: 0.1.0
+Stable tag: 0.2.0
 License: GPL-2.0-or-later
 License URI: https://spdx.org/licenses/GPL-2.0-or-later.html
 
@@ -36,6 +36,25 @@ These come from the Microsoft 365 Copilot Chat API itself, not from this plugin:
 * Text responses only. No image generation, code interpreter or file creation.
 * Long-running prompts are prone to gateway timeouts.
 
+== Privacy ==
+
+This plugin sends prompt text to Microsoft and stores Microsoft credentials on your site.
+
+* **What is sent.** Prompts, any prior turns of the conversation, and the system instruction are
+  sent to the Microsoft 365 Copilot Chat API at graph.microsoft.com, together with the site's
+  timezone. Microsoft grounds its answers in the connected user's own Microsoft 365 content.
+* **What is stored.** Each connected user's OAuth access and refresh tokens are stored in user
+  meta, encrypted with libsodium using the site's authentication salt, along with the display name
+  of the connected Microsoft account.
+* **What that grants.** A stored refresh token carries the delegated scopes the app registration
+  was consented for, which include reading the owner's mail, SharePoint and OneDrive files, Teams
+  chats and channel messages.
+* **Removing it.** Disconnecting from Settings > Microsoft Copilot AI deletes the stored tokens.
+  Uninstalling the plugin deletes the settings and every user's stored tokens. Neither revokes
+  access at Microsoft: withdraw consent at https://myaccount.microsoft.com/.
+* **Microsoft's terms.** Use of the Chat API is governed by the Microsoft 365 Copilot APIs Terms
+  of Use.
+
 == Installation ==
 
 1. Install and activate the PHP AI Client (bundled with WordPress 7.0+).
@@ -46,6 +65,18 @@ These come from the Microsoft 365 Copilot Chat API itself, not from this plugin:
 5. Each user clicks "Connect Microsoft account".
 
 == Changelog ==
+
+= 0.2.0 =
+* Requests to Microsoft Graph now carry explicit timeouts, so a slow Copilot turn cannot occupy a
+  PHP worker indefinitely.
+* A failed token refresh no longer disconnects the account unless Microsoft reports the grant as
+  genuinely dead, and concurrent refreshes no longer race each other into a disconnect.
+* The OAuth return trip now works when the WordPress session expired during Microsoft sign-in.
+* Tokens are encrypted with libsodium authenticated encryption. Storage is refused rather than
+  written in plaintext when encryption is unavailable.
+* The client secret is no longer kept in the autoloaded options cache.
+* Added an uninstall routine that removes the settings and all stored tokens.
+* Added a Privacy section.
 
 = 0.1.0 =
 * Initial release.

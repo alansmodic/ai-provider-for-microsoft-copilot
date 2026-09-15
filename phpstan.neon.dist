@@ -8,6 +8,7 @@ parameters:
         max: 80400
     paths:
         - plugin.php
+        - uninstall.php
         - src
     scanDirectories:
         - vendor/wordpress/php-ai-client/src

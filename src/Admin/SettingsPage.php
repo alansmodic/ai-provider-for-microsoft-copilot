@@ -93,8 +93,32 @@ class SettingsPage
                 'type' => 'array',
                 'sanitize_callback' => [$this, 'sanitize'],
                 'default' => [],
+                // The settings hold a client secret and have no business in the REST API.
+                'show_in_rest' => false,
             ]
         );
+
+        $this->ensureSecretIsNotAutoloaded();
+    }
+
+    /**
+     * Keeps the settings out of the autoloaded options cache.
+     *
+     * register_setting() has no autoload argument, and add_option() defaults to autoloading, so
+     * without this the client secret would be read into memory on every single page load of the
+     * site, front end included.
+     *
+     * @since 0.2.0
+     *
+     * @return void
+     */
+    private function ensureSecretIsNotAutoloaded(): void
+    {
+        if (get_option(Settings::OPTION_NAME) === false) {
+            return;
+        }
+
+        wp_set_option_autoload(Settings::OPTION_NAME, false);
     }
 
     /**
@@ -109,6 +133,15 @@ class SettingsPage
     {
         $existing = get_option(Settings::OPTION_NAME, []);
         $existing = is_array($existing) ? $existing : [];
+
+        /*
+         * options.php checks the option group capability before reaching this point, but the
+         * sanitizer is a public callback reachable through any update_option() of this option,
+         * so it verifies the capability itself rather than trusting the caller.
+         */
+        if (!current_user_can('manage_options')) {
+            return $existing;
+        }
 
         if (!is_array($input)) {
             return $existing;
@@ -149,6 +182,9 @@ class SettingsPage
 
         echo '<div class="wrap">';
         printf('<h1>%s</h1>', esc_html__('Microsoft Copilot AI', 'ai-provider-for-microsoft-copilot'));
+
+        // A custom options page does not get the "Settings saved." notice for free.
+        settings_errors(self::PAGE_SLUG);
 
         $this->renderStatusNotice();
         $this->renderRequirementsNotice();
@@ -255,6 +291,18 @@ class SettingsPage
     private function renderConnectionSection(int $userId, bool $connected): void
     {
         printf('<h2>%s</h2>', esc_html__('Your Microsoft account', 'ai-provider-for-microsoft-copilot'));
+
+        if (!$this->store->isAvailable()) {
+            printf(
+                '<div class="notice notice-error inline"><p>%s</p></div>',
+                esc_html__(
+                    'Accounts cannot be connected: encrypting tokens needs the PHP sodium extension and an auth salt.',
+                    'ai-provider-for-microsoft-copilot'
+                )
+            );
+
+            return;
+        }
 
         if (!$this->settings->isConfigured()) {
             printf(
